@@ -1,0 +1,48 @@
+# STM32CubeIDE/STM32CubeMX生成的编译文件
+/Debug/
+/Release/
+/build/
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+
+# STM32CubeIDE项目文件
+/.settings/
+/.cproject
+/.project
+*.launch
+*.mxproject
+
+# Keil MDK项目文件
+*.uvoptx
+*.uvguix.*
+*.uvprojx
+/Objects/
+/Listings/
+/RTE/
+*.crf
+*.htm
+*.dep
+
+# IAR项目文件
+*.ewp
+*.eww
+*.ewd
+/Debug/Exe/
+/Debug/Obj/
+/Debug/List/
+
+# 通用IDE和系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# 日志文件
+*.log
+*.txt
