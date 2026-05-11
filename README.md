@@ -1,20 +1,39 @@
 基于 STM32G431RBT6 与 FreeRTOS 的轻量化工业数据采集与云传输终端
 项目简介
-本项目是专为大三软件工程专业学生设计的嵌入式 / 物联网入门实战项目，目标是在 1.5 个月内完成一个可演示、可写进简历、能清晰讲解的完整工业级原型。项目基于 STM32G431RBT6 微控制器和 FreeRTOS 实时操作系统，实现了本地模拟量采集、RS485/Modbus RTU 工业总线通信、终端状态统一管理、异常处理以及MQTT 云数据上传核心功能。
+本项目是专为大三软件工程专业（非电子信息科班）学生设计的嵌入式 / 物联网入门实战项目，目标是在 1.5 个月内完成一个可演示、可写进简历、能清晰讲解的完整工业级原型。项目基于 STM32G431RBT6 微控制器和 FreeRTOS 实时操作系统，实现了本地模拟量采集、RS485/Modbus RTU 工业总线通信、终端状态统一管理、异常处理以及MQTT 云数据上传核心功能。
 项目严格遵循 "先跑通再优化、先假数据后真硬件" 的开发原则，避开非科班学生容易踩的硬件坑，重点突出软件架构设计和工程化能力，是嵌入式、物联网、工业软件方向暑假实习的高性价比项目。
-技术栈
-表格
-类别	技术 / 工具
-核心硬件	STM32G431RBT6 开发板、MAX485 模块、ESP8266-01S (AT 固件)
-辅助硬件	USB 转 TTL 模块、USB 转 RS485 模块、10k 电位器 (可选)、ST-Link 下载器
-开发工具	STM32CubeMX 6.10+、Keil MDK-ARM 5.38+、ST-Link 驱动
-调试工具	XCOM/SSCOM 串口助手、MQTTX、Modbus Slave
-核心技术	STM32 HAL 库 (GPIO/USART/ADC)、FreeRTOS (任务 / 消息队列)、Modbus RTU 协议、CRC16 校验、ESP8266 AT 指令、JSON 数据封装
+✨ 项目亮点
+实习导向：覆盖 90% 以上嵌入式 / 物联网实习岗位核心技能点，远超普通 LED + 串口 demo
+避坑设计：先假数据后真硬件，先跑通后优化，确保 1.5 个月内必出成果
+工程化架构：模块化分层设计，代码可维护性强，体现专业软工素养
+可演示性强：可视化运行指示灯、结构化串口日志、MQTT 客户端实时数据展示
+异常处理完善：支持 Modbus 超时重试、CRC 校验、连续失败离线、恢复上线自动检测
+赛道差异化：纯软工学生少有的工业物联网项目，简历竞争力远超普通 Web/APP 项目
+📋 目录
+技术栈与开发环境
 硬件清单与引脚分配
+项目架构
+快速开始
+演示效果
+目录结构
+常见问题
+开发进度计划
+实习简历参考
+许可证
+致谢
+🛠️ 技术栈与开发环境
+表格
+类别	技术 / 工具	版本要求
+核心硬件	STM32G431RBT6 开发板、MAX485 模块、ESP8266-01S	ESP8266 需刷支持 MQTT 的 AT 固件
+辅助硬件	USB 转 TTL 模块、USB 转 RS485 模块、10k 电位器 (可选)、ST-Link V2	-
+开发工具	STM32CubeMX、Keil MDK-ARM、ST-Link 驱动	CubeMX 6.10+、Keil 5.38+
+调试工具	XCOM/SSCOM 串口助手、MQTTX、Modbus Slave	最新稳定版即可
+核心技术	STM32 HAL 库 (GPIO/USART/ADC)、FreeRTOS (任务 / 消息队列)、Modbus RTU 协议、CRC16 校验、ESP8266 AT 指令、JSON 数据封装	-
+📦 硬件清单与引脚分配
 必备硬件清单
 表格
 序号	元器件名称	数量	备注
-1	STM32G431RBT6 开发板	1	核心控制板，推荐带板载 DAP 调试器版本
+1	STM32G431RBT6 开发板	1	推荐带板载 DAP 调试器版本
 2	ST-Link V2 下载器	1	开发板无板载调试器时必备
 3	USB 转 TTL 模块	1	备用串口调试
 4	MAX485 电平转换模块	1	RS485 总线通信
@@ -31,15 +50,7 @@ RS485 通信	PB10(USART3_TX)、PB11(USART3_RX)、PB13(DE)	MAX485 模块 DI/RO/DE
 ESP8266 通信	PA9(USART1_TX)、PA10(USART1_RX)	ESP8266 RX/TX
 ADC 采样 (可选)	PA1	电位器中间引脚
 SWD 下载调试	PA13(SWDIO)、PA14(SWCLK)	ST-Link 下载器
-软件环境搭建
-安装 STM32CubeMX：从 ST 官网下载最新版本，安装后在 "Manage Embedded Software Packages" 中下载STM32CubeG4固件包
-安装 Keil MDK-ARM：安装 5.38 及以上版本，完成激活
-安装 ST-Link 驱动：开发板无板载调试器时需单独安装
-安装调试工具：
-串口助手：推荐 XCOM 或 MobaXterm
-MQTT 客户端：MQTTX (官网免费下载)
-Modbus 模拟工具：Modbus Slave
-项目架构
+🏗️ 项目架构
 软件分层设计 (模块化)
 plaintext
 Project_Workspace/02_Keil工程/
@@ -68,31 +79,18 @@ sampleTask	osPriorityNormal	256	1000ms	本地数据采集 (假数据 / ADC)
 modbusTask	osPriorityNormal	512	1000ms	Modbus RTU 主站轮询、响应解析
 logTask	osPriorityLow	512	2000ms	系统状态统一打印、日志输出
 cloudTask	osPriorityBelowNormal	768	5000ms	ESP8266 控制、MQTT 数据上传
-核心功能实现
-系统运行监控：LED 500ms 周期闪烁，直观判断系统是否正常运行
-本地数据采集：
-默认软件模拟 0-4095 递增采样值，不依赖硬件
-可选 PA1 引脚 ADC 真实采样，支持电位器调节
-Modbus RTU 工业通信：
-主站模式，支持 03 功能码 (读保持寄存器) 和 06 功能码 (写单寄存器)
-完整 CRC16 校验，确保数据传输正确性
-终端状态管理：
-统一数据结构管理本地值、远程值、在线状态、统计计数
-支持通信超时、连续失败离线、恢复上线自动检测
-结构化日志系统：通过 USART2 输出分级日志，格式统一便于调试
-云数据传输：
-ESP8266 通过 AT 指令连接 2.4GHz Wi-Fi
-连接公共 MQTT Broker (broker.emqx.io)
-终端状态以 JSON 格式定时上传
-基础异常处理：Modbus 超时重试、CRC 错误统计、ESP8266 断线重连
-快速开始
+🚀 快速开始
 步骤 1：硬件连接
 按照 "核心引脚分配" 表连接所有模块，特别注意：
 ESP8266 必须使用 3.3V 供电，禁止接 5V
 RS485 总线 A 接 A、B 接 B，共地必须连接
 ADC 输入电压范围 0-3.3V，禁止超过
 步骤 2：工程配置与编译
-克隆本项目到本地，打开01_CubeMX工程/Gateway_Minimal.ioc
+克隆本项目到本地
+bash
+运行
+git clone https://github.com/你的用户名/STM32-Industrial-Data-Gateway.git
+打开01_CubeMX工程/Gateway_Minimal.ioc
 确认以下配置：
 SYS→Debug：Serial Wire
 RCC→High Speed Clock：Crystal/Ceramic Resonator(24MHz)
@@ -108,35 +106,17 @@ RCC→High Speed Clock：Crystal/Ceramic Resonator(24MHz)
 基础功能测试
 观察板载 LD9 是否 500ms 闪烁
 打开串口助手，选择板载 DAP 对应的 COM 口，波特率 115200
-确认串口每秒输出结构化日志，包含本地采样值和系统状态
+确认串口每秒输出结构化日志
 Modbus 通信测试
-打开 Modbus Slave 软件，新建连接，设置从站地址 1，波特率 9600 8N1
-配置寄存器 0 地址值为 123，寄存器 1 地址值为 456
-连接 USB 转 RS485 模块到电脑，A 接 MAX485 的 A，B 接 MAX485 的 B
-观察串口日志，确认显示[MODBUS] rx ok remote=123
-断开 RS485 线，3 秒后日志显示[MODBUS] timeout fail=3和online=0
-重新连接 RS485 线，日志显示online=1，恢复正常读取
+打开 Modbus Slave，新建连接：从站地址 1，波特率 9600 8N1
+配置寄存器 0 值为 123，寄存器 1 值为 456
+连接 USB 转 RS485 模块，观察串口日志是否显示读取成功
+断开 RS485 线，3 秒后日志显示离线；重新连接自动恢复
 MQTT 云传输测试
-打开 MQTTX，新建连接：
-名称：gateway_test
-主机：broker.emqx.io
-端口：1883
-用户名 / 密码：留空
-点击连接，订阅主题gateway/stm32/data
+打开 MQTTX，连接broker.emqx.io:1883
+订阅主题gateway/stm32/data
 确认每 5 秒收到一条 JSON 格式的终端数据
-转动电位器 (ADC 模式)，观察 JSON 中local字段变化
-目录结构
-plaintext
-Project_Workspace/
-├── 00_资料/          # 芯片手册、模块 datasheet、参考资料
-├── 01_CubeMX工程/    # STM32CubeMX配置文件(.ioc)
-├── 02_Keil工程/      # Keil MDK工程源码
-├── 03_笔记/          # 每日开发笔记(按DayXX_主题.txt命名)
-├── 04_截图/          # CubeMX配置、Keil工程、串口日志、MQTT截图
-├── 05_串口日志/      # 调试过程中保存的串口日志文件
-├── 06_演示视频/      # 30秒短视频、2分钟完整演示视频
-└── 07_简历材料/      # 项目描述、面试讲解稿、常见问题答案
-演示效果
+🎬 演示效果
 串口日志示例
 plaintext
 [BOOT] system start
@@ -161,16 +141,73 @@ json
   "mb_fail": 5,
   "upload_count": 24
 }
-常见问题与解决方案
-表格
-问题现象	可能原因	解决方案
-Keil 下载失败	SYS 未配置 Serial Wire；ST-Link 驱动未安装	重新配置 CubeMX 的 SYS 选项；重装 ST-Link 驱动；按住复位键下载
-串口无输出	TX/RX 接反；波特率错误；COM 口选择错误	交叉 TX/RX；确认波特率 115200；在设备管理器查看正确 COM 口
-开 FreeRTOS 后系统卡死	Timebase Source 未改为 TIM6/TIM7	CubeMX 中 SYS→Timebase Source 选择 TIM6
-Modbus 通信无响应	A/B 线接反；DE 引脚控制错误；波特率不匹配	交换 A/B 线；检查 RS485_DE 引脚电平；统一主从站波特率
-ESP8266 无响应	供电不足；TX/RX 接反；固件不支持 MQTT	使用独立 3.3V 电源；交叉 TX/RX；刷写支持 MQTT 的 AT 固件
-ESP8266 连不上 Wi-Fi	不支持 5GHz Wi-Fi；名称含中文；密码错误	连接 2.4GHz Wi-Fi；修改 Wi-Fi 名称为英文；确认密码正确
-开发进度与优先级
+演示截图
+此处可替换为你的实际截图
+开发板实物图
+串口日志截图
+MQTTX 数据接收截图
+Modbus Slave 配置截图
+演示视频
+此处可替换为你的视频链接（推荐上传至 B 站或 GitHub Releases）
+30 秒快速演示：点击观看
+2 分钟完整演示：点击观看
+📂 目录结构
+plaintext
+Project_Workspace/
+├── 00_资料/          # 芯片手册、模块datasheet、参考资料
+├── 01_CubeMX工程/    # STM32CubeMX配置文件(.ioc)
+├── 02_Keil工程/      # Keil MDK工程源码
+├── 03_笔记/          # 每日开发笔记(按DayXX_主题.txt命名)
+├── 04_截图/          # 开发过程截图
+├── 05_串口日志/      # 调试过程中保存的串口日志
+├── 06_演示视频/      # 项目演示视频
+└── 07_简历材料/      # 项目描述、面试讲解稿、常见问题答案
+❓ 常见问题
+<details>
+<summary>Keil下载失败怎么办？</summary>
+<ul>
+<li>检查CubeMX中SYS是否配置为Serial Wire</li>
+<li>确认ST-Link驱动已正确安装</li>
+<li>尝试按住开发板复位键后再点击下载</li>
+<li>检查ST-Link与开发板的SWDIO/SWCLK接线是否正确</li>
+</ul>
+</details>
+<details>
+<summary>串口无输出怎么办？</summary>
+<ul>
+<li>检查TX/RX是否接反（交叉连接）</li>
+<li>确认串口助手波特率为115200，8位数据位，1位停止位，无校验</li>
+<li>在设备管理器中查看正确的COM口号</li>
+<li>确认板载DAP虚拟串口已被正确识别</li>
+</ul>
+</details>
+<details>
+<summary>开FreeRTOS后系统卡死怎么办？</summary>
+<ul>
+<li>检查CubeMX中SYS→Timebase Source是否改为TIM6/TIM7（不能用SysTick）</li>
+<li>确认任务函数中包含osDelay()，否则会占用全部CPU资源</li>
+<li>适当增大任务栈大小，避免栈溢出</li>
+</ul>
+</details>
+<details>
+<summary>Modbus通信无响应怎么办？</summary>
+<ul>
+<li>检查RS485 A/B线是否接反，尝试交换A/B线</li>
+<li>确认RS485_DE引脚电平控制正确（发送时高电平，接收时低电平）</li>
+<li>统一主从站的波特率、数据位、停止位、校验位</li>
+<li>确认从站地址与程序中配置的一致</li>
+</ul>
+</details>
+<details>
+<summary>ESP8266无响应怎么办？</summary>
+<ul>
+<li>使用独立3.3V电源供电，避免开发板供电不足</li>
+<li>检查TX/RX是否交叉连接</li>
+<li>尝试不同波特率（常见：115200、9600、74880）</li>
+<li>刷写支持MQTT指令的官方AT固件</li>
+</ul>
+</details>
+📅 开发进度计划
 1.5 个月标准开发计划
 表格
 周次	核心任务	验收标准
@@ -187,7 +224,20 @@ ESP8266 连不上 Wi-Fi	不支持 5GHz Wi-Fi；名称含中文；密码错误	�
 最低可交付版本
 若时间不足，完成以下核心功能即可满足实习简历要求：
 基于 STM32G431RBT6 和 FreeRTOS 的轻量化工业数据采集终端，实现本地数据采样、RS485/Modbus RTU 主站轮询和串口日志监控。采用多任务架构划分模块，封装基础 BSP 接口，支持 Modbus CRC 校验、通信超时、连续失败离线和恢复上线机制。
-许可证
+📝 实习简历参考
+项目名称
+基于 STM32G431RBT6 与 FreeRTOS 的轻量化工业数据采集与云传输终端
+项目描述
+基于 STM32G431RBT6 和 FreeRTOS 设计轻量化工业数据采集与云传输终端，实现本地模拟量采集、RS485/Modbus RTU 主站轮询、ESP8266 联网和 MQTT 数据上传。项目采用多任务架构划分采样、通信、日志和云传输模块，并设计统一数据结构管理终端状态，支持通信超时、重试、离线检测和恢复上线日志输出。
+项目职责与亮点
+使用 STM32CubeMX 完成 GPIO、USART、ADC、FreeRTOS 等外设配置
+基于 FreeRTOS 实现 5 个独立任务，完成系统功能解耦和调度
+封装 LED、UART、RS485 等 BSP 模块，采用分层架构提升代码可维护性
+实现 Modbus RTU 主站 03/06 功能，完成 CRC16 校验和响应解析
+设计终端状态管理模块，整合本地与远程数据，支持异常状态检测
+通过 ESP8266 AT 指令实现 Wi-Fi 连接和 MQTT JSON 数据上传
+📄 许可证
 本项目仅供个人学习交流使用，禁止用于商业用途。
-致谢
+🙏 致谢
 感谢所有开源社区贡献者提供的参考资料和工具。
+如果这个项目对你有帮助，欢迎点个 Star ⭐ 支持一下！
