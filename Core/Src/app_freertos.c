@@ -129,7 +129,7 @@ void StartLedTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	bsp_led_toggle(0);
+	bsp_led_toggle(1);
     osDelay(500);
   }
   /* USER CODE END StartLedTask */
@@ -145,11 +145,13 @@ void StartLedTask(void *argument)
 void StartLogTask(void *argument)
 {
   /* USER CODE BEGIN StartLogTask */
+	
+	
   /* Infinite loop */
   for(;;)
   {
-    bsp_uart_send_string("hello rtos\r\n");
-    osDelay(1000);
+     bsp_uart1_send_string("hello rtos\r\n");
+     osDelay(1000);
   }
   /* USER CODE END StartLogTask */
 }

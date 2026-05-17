@@ -11,17 +11,7 @@ void bsp_uart_start_receive(void)
     rec_flag = 0;
     memset(rec_buff, 0, sizeof(rec_buff));
 
-    HAL_UART_Receive_IT(&huart2, &rec_data, 1);
-}
-
-void bsp_uart3_rx_start(void)
-{
-    bsp_uart_start_receive();
-}
-
-void bsp_uart_send_string(char *str)
-{
-    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), 100);
+    HAL_UART_Receive_IT(&huart1, &rec_data, 1);
 }
 
 void bsp_uart1_send_string(const char *str)
@@ -29,15 +19,20 @@ void bsp_uart1_send_string(const char *str)
     if (str == NULL) {
         return;
     }
-
     HAL_UART_Transmit(&huart1, (uint8_t *)str, strlen(str), 100);
 }
+
+static void bsp_uart_send_string(const char *str)
+{
+    bsp_uart1_send_string(str);
+}
+
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART2)
     {
-        TIM4->CNT = 0;
+        TIM3->CNT = 0;
         rec_flag = 1;
 
         if (rec_count < sizeof(rec_buff) - 1)
@@ -46,7 +41,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             rec_count++;
         }
 
-        HAL_UART_Receive_IT(&huart2, &rec_data, 1);
+        HAL_UART_Receive_IT(&huart1, &rec_data, 1);
     }
 }
 
@@ -54,7 +49,7 @@ void bsp_uart_data_process(void)
 {
     if (rec_flag)
     {
-        if (TIM4->CNT > 2000)
+        if (TIM3->CNT > 2000)
         {
             if ((rec_count >= 3) &&
                 (rec_buff[0] == 'l') &&

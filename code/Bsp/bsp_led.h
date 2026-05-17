@@ -4,7 +4,6 @@
 #include "main.h"
 #include <stdint.h>
 
-void led_show(uint8_t led, uint8_t mode);
 void bsp_led_on(uint8_t led);
 void bsp_led_off(uint8_t led);
 void bsp_led_toggle(uint8_t led);

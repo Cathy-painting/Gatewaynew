@@ -5,7 +5,7 @@ void app_init_before_scheduler(void)
     terminal_init();
     bsp_led_write8(0x00);
     bsp_rs485_set_rx_mode();
-    bsp_uart3_rx_start();
+    bsp_uart_start_receive();
     log_info("[BOOT] system start\r\n");
 }
 
