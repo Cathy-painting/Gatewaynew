@@ -28,12 +28,9 @@
 #include "bsp_led.h"
 #include "bsp_uart.h"
 #include "bsp_adc.h"
-
 #include <stdio.h>
 #include <string.h>
-#include <stdio.h>  
-#include "sample_service.h"
-#include "adc.h"
+#include "terminal_service.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,7 +62,11 @@ const osThreadAttr_t sampleTask_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-
+void StartLedTask(void *argument);
+void StartSampleTask(void *argument);
+void StartModbusTask(void *argument);
+void StartLogTask(void *argument);
+void StartCloudTask(void *argument);
 /* USER CODE END FunctionPrototypes */
 
 void StartSampleTask(void *argument);
@@ -122,7 +123,6 @@ void MX_FREERTOS_Init(void) {
 void StartSampleTask(void *argument)
 {
   /* USER CODE BEGIN StartSampleTask */
-	//static uint16_t fake_value = 0;
 	char buf[64];
 	    uint16_t adc_value = 0;
 
@@ -135,9 +135,16 @@ void StartSampleTask(void *argument)
 
         // 终端/界面也同步更新 ADC 真实值
         terminal_set_local_value(adc_value);
-    snprintf(buf, sizeof(buf), "[SAMPLE] local=%u\r\n", adc_value);
-    HAL_UART_Transmit(&huart1, (uint8_t*)buf, (uint16_t)strlen(buf), 100);
-    osDelay(1000);
+
+        // USART2: 板载DAP虚拟串口做日志
+        snprintf(buf, sizeof(buf), "[SAMPLE] local=%u\r\n", adc_value);
+        bsp_uart2_send_string(buf);
+
+        // USART3: TTL(接PB10/PB11) 做单独验证输出
+        snprintf(buf, sizeof(buf), "uart3 test local=%u\r\n", adc_value);
+        bsp_uart3_send_string(buf);
+
+        osDelay(1000);
   }
   /* USER CODE END StartSampleTask */
 }
