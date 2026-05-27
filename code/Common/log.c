@@ -4,7 +4,7 @@
 
 void log_info(const char *msg)
 {
-    bsp_uart2_send_string(msg);
+    bsp_uart1_send_string(msg);
 }
 
 void log_hex(const char *prefix, const uint8_t *data, uint16_t len)

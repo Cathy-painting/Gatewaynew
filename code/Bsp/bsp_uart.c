@@ -66,8 +66,7 @@ void bsp_uart3_send_string(const char *str)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	
-	if (huart->Instance == USART2)
+    if (huart->Instance == USART2)
     {
         if (uart2_rx_len < sizeof(uart2_rx_buf) - 1)
         {
@@ -76,7 +75,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         }
         HAL_UART_Receive_IT(&huart2, &uart2_rx_byte, 1);
     }
-    if (huart->Instance == USART3)
+    else if (huart->Instance == USART3)
     {
         if (uart3_rx_len < sizeof(uart3_rx_buf) - 1)
         {

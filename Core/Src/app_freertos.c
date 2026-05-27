@@ -25,33 +25,52 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "bsp_led.h"
-#include "bsp_uart.h"
-#include "bsp_adc.h"
-#include <stdio.h>
-#include <string.h>
-#include "terminal_service.h"
+#include "app_tasks.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
 /* USER CODE END Variables */
+/* Definitions for ledTask */
+osThreadId_t ledTaskHandle;
+const osThreadAttr_t ledTask_attributes = {
+  .name = "ledTask",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 128 * 4
+};
+/* Definitions for logTask */
+osThreadId_t logTaskHandle;
+const osThreadAttr_t logTask_attributes = {
+  .name = "logTask",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 256 * 4
+};
+/* Definitions for senderTask */
+osThreadId_t senderTaskHandle;
+const osThreadAttr_t senderTask_attributes = {
+  .name = "senderTask",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 256 * 4
+};
+/* Definitions for receiverTask */
+osThreadId_t receiverTaskHandle;
+const osThreadAttr_t receiverTask_attributes = {
+  .name = "receiverTask",
+  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 256 * 4
+};
 /* Definitions for sampleTask */
 osThreadId_t sampleTaskHandle;
 const osThreadAttr_t sampleTask_attributes = {
@@ -59,16 +78,28 @@ const osThreadAttr_t sampleTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
   .stack_size = 256 * 4
 };
+/* Definitions for sampleQueue */
+osMessageQueueId_t sampleQueueHandle;
+const osMessageQueueAttr_t sampleQueue_attributes = {
+  .name = "sampleQueue"
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 void StartLedTask(void *argument);
-void StartSampleTask(void *argument);
 void StartModbusTask(void *argument);
 void StartLogTask(void *argument);
 void StartCloudTask(void *argument);
+void StartSenderTask(void *argument);
+void StartReceiverTask(void *argument);
+void StartSampleTask(void *argument);
+void MX_FREERTOS_Init(void);
 /* USER CODE END FunctionPrototypes */
 
+void StartLedTask(void *argument);
+void StartLogTask(void *argument);
+void StartSenderTask(void *argument);
+void StartReceiverTask(void *argument);
 void StartSampleTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -80,37 +111,128 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of sampleQueue */
+  sampleQueueHandle = osMessageQueueNew (8, 4, &sampleQueue_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
+  /* creation of ledTask */
+  ledTaskHandle = osThreadNew(StartLedTask, NULL, &ledTask_attributes);
+
+  /* creation of logTask */
+  logTaskHandle = osThreadNew(StartLogTask, NULL, &logTask_attributes);
+
+  /* creation of senderTask */
+  senderTaskHandle = osThreadNew(StartSenderTask, NULL, &senderTask_attributes);
+
+  /* creation of receiverTask */
+  receiverTaskHandle = osThreadNew(StartReceiverTask, NULL, &receiverTask_attributes);
+
   /* creation of sampleTask */
   sampleTaskHandle = osThreadNew(StartSampleTask, NULL, &sampleTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  /* add modbusTask and cloudTask */
+  const osThreadAttr_t modbusTask_attributes = {
+    .name = "modbusTask",
+    .priority = (osPriority_t) osPriorityNormal,
+    .stack_size = 512 * 4
+  };
+  osThreadNew(StartModbusTask, NULL, &modbusTask_attributes);
+
+  const osThreadAttr_t cloudTask_attributes = {
+    .name = "cloudTask",
+    .priority = (osPriority_t) osPriorityBelowNormal,
+    .stack_size = 768 * 4
+  };
+  osThreadNew(StartCloudTask, NULL, &cloudTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
   /* USER CODE END RTOS_EVENTS */
 
+}
+
+/* USER CODE BEGIN Header_StartLedTask */
+/**
+  * @brief  Function implementing the ledTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartLedTask */
+void StartLedTask(void *argument)
+{
+  /* USER CODE BEGIN StartLedTask */
+  for(;;)
+  {
+    app_led_task();
+  }
+  /* USER CODE END StartLedTask */
+}
+
+/* USER CODE BEGIN Header_StartLogTask */
+/**
+  * @brief Function implementing the logTask thread.
+  * @param argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartLogTask */
+void StartLogTask(void *argument)
+{
+  /* USER CODE BEGIN StartLogTask */
+  for(;;)
+  {
+    app_log_task();
+  }
+  /* USER CODE END StartLogTask */
+}
+
+/* USER CODE BEGIN Header_StartSenderTask */
+/**
+  * @brief Function implementing the senderTask thread.
+  * @param argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartSenderTask */
+void StartSenderTask(void *argument)
+{
+  /* USER CODE BEGIN StartSenderTask */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartSenderTask */
+}
+
+/* USER CODE BEGIN Header_StartReceiverTask */
+/**
+  * @brief Function implementing the receiverTask thread.
+  * @param argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartReceiverTask */
+void StartReceiverTask(void *argument)
+{
+  /* USER CODE BEGIN StartReceiverTask */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartReceiverTask */
 }
 
 /* USER CODE BEGIN Header_StartSampleTask */
@@ -123,34 +245,29 @@ void MX_FREERTOS_Init(void) {
 void StartSampleTask(void *argument)
 {
   /* USER CODE BEGIN StartSampleTask */
-	char buf[64];
-	    uint16_t adc_value = 0;
-
-  /* Infinite loop */
   for(;;)
   {
-		
-     // 只留 ADC 读取，彻底删掉 fake_value 的逻辑
-        adc_value = bsp_adc_read();
-
-        // 终端/界面也同步更新 ADC 真实值
-        terminal_set_local_value(adc_value);
-
-        // USART2: 板载DAP虚拟串口做日志
-        snprintf(buf, sizeof(buf), "[SAMPLE] local=%u\r\n", adc_value);
-        bsp_uart2_send_string(buf);
-
-        // USART3: TTL(接PB10/PB11) 做单独验证输出
-        snprintf(buf, sizeof(buf), "uart3 test local=%u\r\n", adc_value);
-        bsp_uart3_send_string(buf);
-
-        osDelay(1000);
+    app_sample_task();
   }
   /* USER CODE END StartSampleTask */
 }
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+void StartModbusTask(void *argument)
+{
+  for(;;)
+  {
+    app_modbus_task();
+  }
+}
 
+void StartCloudTask(void *argument)
+{
+  for(;;)
+  {
+    app_cloud_task();
+  }
+}
 /* USER CODE END Application */
 

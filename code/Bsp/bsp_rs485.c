@@ -4,9 +4,9 @@
 #include "usart.h"
 
 #define RS485_DE_GPIO_Port GPIOB
-#define RS485_DE_Pin GPIO_PIN_12
+#define RS485_DE_Pin GPIO_PIN_13
 
-extern UART_HandleTypeDef huart1;
+extern UART_HandleTypeDef huart3;
 
 static void bsp_rs485_short_delay(void)
 {
@@ -32,8 +32,8 @@ void bsp_rs485_send(const uint8_t *data, uint16_t len)
 
     bsp_rs485_set_tx_mode();
     bsp_rs485_short_delay();
-    HAL_UART_Transmit(&huart1, (uint8_t *)data, len, 500);
-    while (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_TC) == RESET) {
+    HAL_UART_Transmit(&huart3, (uint8_t *)data, len, 500);
+    while (__HAL_UART_GET_FLAG(&huart3, UART_FLAG_TC) == RESET) {
     }
     bsp_rs485_short_delay();
     bsp_rs485_set_rx_mode();

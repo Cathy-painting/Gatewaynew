@@ -27,6 +27,26 @@ void terminal_set_local_value(uint16_t value)
     g_terminal_data.sample_count++;
 }
 
+void terminal_set_remote_value(uint16_t value)
+{
+    g_terminal_data.remote_value = value;
+}
+
+void terminal_set_remote_online(uint8_t online)
+{
+    g_terminal_data.remote_online = online;
+}
+
+void terminal_inc_modbus_ok(void)
+{
+    g_terminal_data.modbus_ok_count++;
+}
+
+void terminal_inc_modbus_fail(void)
+{
+    g_terminal_data.modbus_fail_count++;
+}
+
 
 // 9. 函数功能：把小本子的内容，「复印一份」给外面的人
 // 参数：data = 外面的人准备好的「复印纸」
