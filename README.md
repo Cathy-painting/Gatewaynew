@@ -1,422 +1,330 @@
-# 基于 STM32G431RBT6 与 FreeRTOS 的轻量化工业数据采集与云传输终端
+# 基于 CT117E-M4 的轻量化工业数据采集与云传输终端
 
-## 📋 项目概述
+本项目基于 `STM32G431RBT6`、FreeRTOS 和 CT117E-M4 开发板，实现一个轻量化工业数据采集与云传输终端。当前说明已按 `CT117E-M4产品手册.pdf` 里的原理图重新核对：板载 DAP 虚拟串口实际对应 `USART1/PA9/PA10`，外接 ESP8266 改为使用 J3 排针上的 `USART2/PA2/PA3`，避免和调试日志串口冲突。
 
-这是一个完整的嵌入式工业数据采集系统，从 0 到 1 的保姆级全流程项目。基于 STM32G431RBT6 微控制器和 FreeRTOS 实时操作系统，实现本地数据采样、RS485/Modbus RTU 主站通信、以及通过 ESP8266 的 MQTT 云传输功能。
+项目遵守“不改 CubeMX 生成代码”的原则：CubeMX 生成目录只作为当前硬件初始化依据，业务代码和补充初始化都放在 `code/` 目录中。
 
-### 核心特性
+## 当前实现
 
-- **多任务架构**：5 个独立任务（LED、采样、Modbus、日志、云传输）
-- **本地采样**：支持 ADC 模拟量采集或假数据模拟
-- **Modbus RTU 主站**：通过 RS485 读写外部设备寄存器（功能码 03/06）
-- **云传输**：ESP8266 AT 指令控制，MQTT JSON 数据上传
-- **异常处理**：通信超时、连续失败离线、自动恢复上线
-- **日志系统**：实时串口日志输出，便于调试和演示
+- FreeRTOS 多任务：`ledTask`、`sampleTask`、`modbusTask`、`logTask`、`cloudTask`。
+- LD1-LD8 板载 LED：`PC8-PC15` 接 SN74HC573 数据输入，`PD2` 接锁存使能 `LE`。
+- 本地模拟量采样：`ADC2_IN15/PB15`，对应手册中 J11/R37 电位器资源。
+- 日志输出：`USART1/PA9/PA10`，对应板载 DAP 虚拟串口，`115200 8N1`。
+- 云传输：ESP8266 AT 固件模块接 `USART2/PA2/PA3`，发布 MQTT JSON。
+- RS485/Modbus RTU 主站：`USART3/PB10/PB11` + 外接 MAX485/SP3485，`PB13` 做方向控制。
+- Modbus 功能码 `03`：读保持寄存器。
+- Modbus 功能码 `06`：写单个保持寄存器接口。
+- 统一终端状态：本地值、远程值、Modbus 在线状态、云在线状态、采样次数、通信成功/失败次数、上传次数。
+- 异常处理：Modbus 超时、CRC/帧错误统计、连续失败离线、恢复上线、云上传失败重连。
 
-## 🎯 最终实现效果
+## 和产品手册核对后的关键结论
 
-1. STM32G431RBT6 运行 FreeRTOS
-2. ledTask 控制 PB9/LD9 周期闪烁（500ms）
-3. sampleTask 周期产生本地采样值（1000ms）
-4. modbusTask 通过 USART3 + RS485 + Modbus RTU 读取外部寄存器（1000ms）
-5. logTask 通过 USART2 打印系统日志和终端状态（2000ms）
-6. cloudTask 通过 ESP8266 连接 Wi-Fi，用 MQTT 上传 JSON 数据（5000ms）
-7. MQTTX 或手机 MQTT 客户端可以看到 STM32 上传的数据
-8. 支持 Modbus 超时、连续失败离线、恢复上线等基础异常处理
+| 手册原理图资源 | 实际连接 | 本项目处理 |
+|---|---|---|
+| LD1-LD8 | U1 SN74HC573，数据线 `PC8-PC15`，锁存 `PD2` | 代码使用 `bsp_led_write8()` 锁存输出，位值 `1` 表示点亮 |
+| DAP 虚拟串口 | `PA9/USART1_TX`、`PA10/USART1_RX` | 日志从 USART1 输出 |
+| J3 排针 | 引出 `PA1-PA7`，包含 `PA2/PA3` | ESP8266 使用 USART2 |
+| J1 排针 | 引出 `PA11/PA12/PB10-PB15` | RS485 使用 `PB10/PB11/PB13` |
+| PB15 模拟输入 | J11 接 R37 电位器 | ADC2 读取 PB15 |
+| PB12 模拟输入 | J12 接 R38 电位器 | 当前未使用 |
+| PA15/PB4 | J10/J9 接 555 信号资源 | 当前未使用 |
+| PA11/PA12 | USB_DEVICE D-/D+ | 当前未使用，不建议拿去接普通串口 |
+| PB8 | LCD_RS，同时和 BOOT0 相关 | 当前未使用，不建议外接新模块 |
+| PC8-PC15 | 同时接 LED 锁存器和 LCD 数据线 | 当前使用 LED，不建议同时插 LCD 并驱动 |
 
-## 🔧 硬件配置
+## 需要购买的东西
 
-### 开发板：STM32G431RBT6
+最小演示版：
 
-| 资源 | 引脚 | 用途 | 说明 |
-|------|------|------|------|
-| LED 运行指示 | PB9 (LD9) | ledTask 闪烁 | 低电平点亮 |
-| 日志串口 | USART2 (PA2/PA3) | 板载 DAP 虚拟串口 | 115200 8N1 |
-| RS485 串口 | USART3 (PB10/PB11) | Modbus 通信 | 9600 8N1 |
-| RS485 使能 | PB13 | RS485_DE 控制 | GPIO Output |
-| ADC 采样 | PA1 或 PB15 | 本地模拟量输入 | 12-bit |
-| ESP8266 串口 | USART1 (PA9/PA10) | 云传输（可选） | 115200 8N1 |
+- CT117E-M4 / STM32G431RBT6 开发板。
+- USB 数据线，用于供电、下载、查看 DAP 虚拟串口日志。
+- MAX485 或 SP3485 TTL-RS485 模块，建议买 3.3 V 兼容款。
+- USB-RS485 模块，或一个真实 Modbus RTU 从站设备。
+- 杜邦线若干。
 
-### 外部模块
+云传输版额外需要：
 
-- **MAX485 模块**：RS485 物理层转换
-- **USB 转 RS485 模块**：用于测试和调试
-- **ESP8266 模块**：Wi-Fi 和 MQTT 功能（可选）
+- ESP8266 AT 固件模块，例如 ESP-01S、ESP-12F 开发小板，必须支持 `AT+MQTTUSERCFG`、`AT+MQTTCONN`、`AT+MQTTPUB`。
+- 稳定 3.3 V 电源模块，ESP8266 峰值电流建议至少 500 mA。
+- USB-TTL 串口模块，用来先单独测试 ESP8266。
+- MQTTX，用于 PC 端订阅 MQTT 数据。
 
-## 📁 软件架构
+推荐软件：
 
-### 目录结构
+- Keil MDK-ARM。
+- STM32CubeMX。
+- STM32CubeG4 固件包。
+- 串口助手，例如 SSCOM、XCOM、PuTTY、MobaXterm。
+- MQTTX。
 
-```
-Gateway/
-├── Core/                    # STM32 核心文件
-│   ├── Src/
-│   │   ├── main.c
-│   │   ├── stm32g4xx_it.c
-│   │   └── app_freertos.c
-│   └── Inc/
-├── Drivers/                 # HAL 驱动
-├── Middlewares/             # FreeRTOS
-├── code/                    # 应用代码
-│   ├── App/                 # 应用层
-│   ├── Bsp/                 # 板级驱动（LED、UART、ADC、RS485）
-│   ├── Common/              # 通用工具（log、crc16）
-│   ├── Protocol/            # 协议实现（modbus_master）
-│   └── Service/             # 业务服务（terminal、sample、modbus、esp8266、cloud）
-└── 文档/                    # 分阶段代码参考
-```
+## 实际引脚分配
 
-### 任务设计
+| 功能 | STM32 引脚 | 外设/接口 | 说明 |
+|---|---|---|---|
+| LD1-LD8 数据 | `PC8-PC15` | GPIO 输出 | 接 SN74HC573 的 `1D-8D` |
+| LD1-LD8 锁存 | `PD2` | GPIO 输出 | 接 SN74HC573 `LE` |
+| 调试日志 | `PA9/PA10` | USART1 | 板载 DAP 虚拟串口，115200 8N1 |
+| ESP8266 | `PA2/PA3` | USART2 | J3 排针引出，115200 8N1 |
+| RS485 数据 | `PB10/PB11` | USART3 | J1 排针引出，Modbus RTU 主站 |
+| RS485 方向 | `PB13` | GPIO 输出 | 接 MAX485 `DE` 和 `/RE`，高发低收 |
+| ADC 采样 | `PB15` | ADC2_IN15 | J11/R37 电位器，或外部 0-3.3 V 模拟量 |
+| 下载调试 | `PA13/PA14` | SWDIO/SWCLK | 板载 DAP 下载调试 |
+| 外部晶振 | `PF0/PF1` | HSE | 手册为 24 MHz |
 
-| 任务名 | 优先级 | 周期 | 栈大小 | 功能 |
-|--------|--------|------|--------|------|
-| ledTask | Low | 500ms | 128 | LED 闪烁指示 |
-| sampleTask | Normal | 1000ms | 256 | 本地数据采样 |
-| modbusTask | Normal | 1000ms | 512 | RS485 Modbus 轮询 |
-| logTask | Low | 2000ms | 512 | 状态日志输出 |
-| cloudTask | BelowNormal | 5000ms | 768 | MQTT 数据上传 |
+## 接线说明
 
-### 数据流
+### 1. 日志串口
 
-```
-ADC/假数据 → sampleTask → terminal_service
-                              ↓
-                        终端状态数据结构
-                              ↓
-                    ┌─────────┼─────────┐
-                    ↓         ↓         ↓
-              modbusTask  logTask  cloudTask
-                    ↓         ↓         ↓
-              RS485/Modbus  USART2  ESP8266/MQTT
-```
+优先使用板载 DAP 虚拟串口，不需要额外接 USB-TTL：
 
-## 📚 分阶段实现指南（29 批）
+1. 用开发板的 DAP USB 接电脑。
+2. 在 Windows 设备管理器里找到新增的 USB 串行设备 COM 口。
+3. 串口助手打开该 COM 口。
+4. 参数设置为 `115200 8N1`。
+5. 运行后应看到 `[BOOT] system start`、`[LOG]`、`[STATE]` 等日志。
 
-### 第 0 批：准备软件、硬件和心态
-- 软件：CubeMX、Keil、STM32CubeG4、ST-Link 驱动、串口助手、MQTTX
-- 硬件：开发板、ST-Link、USB 转 TTL、MAX485、USB 转 RS485、ESP8266
-- 文件夹：00_资料、01_CubeMX工程、02_Keil工程、03_笔记、04_截图、05_串口日志、06_演示视频、07_简历材料
+注意：日志现在走 `USART1/PA9/PA10`，这是产品手册里 DAP 虚拟串口接到目标 MCU 的实际连接。不要再把 ESP8266 接到 PA9/PA10，否则会和板载 DAP 串口冲突。
 
-### 第 1-6 批：基础工程（第 1 周）
-- **第 1 批**：CubeMX 最小工程，LED + USART2 日志
-- **第 2 批**：开启 FreeRTOS，跑 ledTask + logTask
-- **第 3 批**：Queue 演示，理解任务间传数据
-- **第 4 批**：工程分层（App/Bsp/Common/Protocol/Service）
-- **第 5 批**：本地采样任务，先用假数据
-- **第 6 批**：可选 ADC 真实采样
+### 2. MAX485 / RS485
 
-### 第 7-11 批：RS485/Modbus 通信（第 2-3 周）
-- **第 7 批**：USART3 + RS485 物理链路
-  - **关键问题**：USART3 中断未在 CubeMX 中使能
-  - **解决方案**：在 NVIC Settings 中勾选 "USART3 global interrupt"
-- **第 8 批**：USART3 单字节中断接收
-- **第 9 批**：MAX485 接线和 RS485 收发
-- **第 10 批**：CRC16 Modbus 校验
-- **第 11 批**：Modbus RTU 03 读保持寄存器
+STM32 到 MAX485：
 
-### 第 12-16 批：系统整合（第 3-4 周）
-- **第 12 批**：Modbus 06 写单寄存器
-- **第 13 批**：modbusTask 周期轮询
-- **第 14 批**：终端状态整合
-- **第 15 批**：日志系统优化
-- **第 16 批**：本地版项目验收（可投简历）
+| STM32 | MAX485/SP3485 模块 |
+|---|---|
+| `PB10 / USART3_TX` | `DI` |
+| `PB11 / USART3_RX` | `RO` |
+| `PB13` | `DE` 和 `/RE` 短接后接这里 |
+| `GND` | `GND` |
+| `3.3 V` 或 `5 V` | `VCC`，按模块要求供电 |
 
-### 第 17-24 批：云传输和演示（第 5-6 周）
-- **第 17 批**：ESP8266 串口方案选择
-- **第 18 批**：ESP8266 AT 指令通信
-- **第 19 批**：Wi-Fi 连接
-- **第 20 批**：MQTT Broker 准备
-- **第 21 批**：ESP8266 MQTT 连接
-- **第 22 批**：上传终端真实状态
-- **第 23 批**：完整项目联调
-- **第 24 批**：错误处理和稳定性增强
+MAX485 到 USB-RS485 或 Modbus 从站：
 
-### 第 25-29 批：演示和简历
-- **第 25 批**：演示材料准备（视频、截图）
-- **第 26 批**：简历写法
-- **第 27 批**：面试讲解稿
-- **第 28 批**：1 个半月时间安排
-- **第 29 批**：每日笔记模板
+| MAX485 | USB-RS485 / 从站 |
+|---|---|
+| `A` | `A` |
+| `B` | `B` |
+| `GND` | `GND`，调试时建议共地 |
 
-## 🔑 关键代码模块
+如果一直超时，可以把 A/B 对调一次。不同模块对 A/B、D+/D- 的标注可能不完全一致。
 
-### BSP 层（板级驱动）
+### 3. ESP8266
 
-**bsp_uart.c** - UART 驱动
-```c
-void bsp_uart2_send_string(const char *str);  // UART2 发送（日志）
-void bsp_uart3_send_string(const char *str);  // UART3 发送（RS485）
-void bsp_uart3_rx_start(void);                // UART3 启动中断接收
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);  // 中断回调
-```
+先用 USB-TTL 单独测试 ESP8266：
 
-**bsp_rs485.c** - RS485 驱动
-```c
-void bsp_rs485_set_tx_mode(void);   // 设置发送模式
-void bsp_rs485_set_rx_mode(void);   // 设置接收模式
-void bsp_rs485_send(const uint8_t *data, uint16_t len);  // 发送数据
-```
+| USB-TTL | ESP8266 |
+|---|---|
+| `TX` | `RX` |
+| `RX` | `TX` |
+| 稳定 `3.3 V` | `VCC` |
+| `GND` | `GND` |
 
-### Protocol 层（协议实现）
+ESP8266 启动脚：
 
-**modbus_master.c** - Modbus RTU 主站
-```c
-uint16_t modbus_build_read_holding_req(uint8_t slave_id, uint16_t start_addr, uint16_t quantity, uint8_t *tx_buf);
-uint8_t modbus_parse_read_holding_resp(const uint8_t *rx_buf, uint16_t rx_len, uint16_t *reg_values, uint16_t max_regs);
-uint16_t modbus_build_write_single_req(uint8_t slave_id, uint16_t reg_addr, uint16_t value, uint8_t *tx_buf);
-uint8_t modbus_verify_write_single_resp(const uint8_t *rx_buf, uint16_t rx_len, uint8_t slave_id, uint16_t reg_addr, uint16_t value);
-```
+- `EN/CH_PD` 拉高到 3.3 V。
+- `GPIO0` 正常运行时拉高到 3.3 V。
+- 发送 `AT\r\n` 能返回 `OK` 后，再接入 STM32。
 
-**crc16.c** - CRC16 校验
-```c
-uint16_t crc16_modbus(const uint8_t *data, uint16_t len);  // Modbus RTU CRC16
-```
+STM32 到 ESP8266：
 
-### Service 层（业务服务）
+| STM32 | ESP8266 |
+|---|---|
+| `PA2 / USART2_TX` | `RX` |
+| `PA3 / USART2_RX` | `TX` |
+| `GND` | `GND` |
 
-**terminal_service.c** - 终端状态管理
-```c
-typedef struct {
-    uint16_t local_value;        // 本地采样值
-    uint16_t remote_value;       // Modbus 远程值
-    uint8_t remote_online;       // 远程设备在线状态
-    uint32_t sample_count;       // 采样次数
-    uint32_t modbus_ok_count;    // Modbus 成功次数
-    uint32_t modbus_fail_count;  // Modbus 失败次数
-    uint32_t upload_count;       // 上传次数
-} terminal_data_t;
+ESP8266 不建议直接使用开发板弱 3.3 V 引脚供电。如果一连 Wi-Fi 就重启，优先检查 3.3 V 供电电流。
 
-void terminal_init(void);
-void terminal_set_local_value(uint16_t value);
-void terminal_set_remote_value(uint16_t value);
-void terminal_set_remote_online(uint8_t online);
-void terminal_get_snapshot(terminal_data_t *out);
-```
+### 4. PB15 ADC
 
-**modbus_service.c** - Modbus 服务
-```c
-void modbus_service_init(void);
-void modbus_service_poll(void);  // 周期轮询
-uint8_t modbus_service_is_online(void);
-uint16_t modbus_service_get_remote_value(void);
+推荐直接使用板上 J11/R37 电位器资源：
+
+1. 确认 J11 跳线连接到 PB15 对应电位器。
+2. 运行程序。
+3. 调节 R37。
+4. 查看日志中的 `[SAMPLE] local=...` 是否变化。
+
+如果使用外接电位器：
+
+| 电位器 | STM32 |
+|---|---|
+| 一端 | `3.3 V` |
+| 另一端 | `GND` |
+| 中间滑动端 | `PB15 / ADC2_IN15` |
+
+PB15 输入电压必须在 `0 V` 到 `3.3 V` 之间，不能接 5 V 模拟量。
+
+## CubeMX 当前配置
+
+当前工程配置和手册核对后可继续使用：
+
+- MCU：`STM32G431RBT6`。
+- SYS：Serial Wire。
+- HSE：24 MHz 外部晶振。
+- 系统时钟：HSE 经 PLL 到 80 MHz。
+- FreeRTOS：CMSIS_V2。
+- ADC2：`PB15 / ADC2_IN15`。
+- USART1：`PA9/PA10`，115200 8N1，中断开启，用于 DAP 日志。
+- USART2：`PA2/PA3`，115200 8N1，中断开启，用于 ESP8266。
+- USART3：`PB10/PB11`，115200 8N1，中断开启，用于 RS485/Modbus。
+- GPIO：`PC8-PC15` 和 `PD2` 用于 LD1-LD8 锁存输出。
+
+手写代码额外处理：
+
+- 当前 `Gateway.ioc` 没有把 `PB13` 配成 GPIO 输出。为避免改 CubeMX 生成代码，项目在 `bsp_rs485_init()` 中运行时配置 `PB13` 为 RS485 方向控制输出。
+
+如果重新用 CubeMX 生成代码，请确认不要覆盖手写目录 `code/`。业务逻辑都在 `code/` 下。
+
+## 软件结构
+
+```text
+code/
+  App/
+    app_tasks.c              FreeRTOS 任务业务入口
+  Bsp/
+    bsp_led.c/h              LD1-LD8 锁存 LED 驱动
+    bsp_uart.c/h             USART 发送与中断接收缓冲
+    bsp_rs485.c/h            MAX485 方向控制与发送
+    bsp_adc.c/h              ADC2/PB15 采样
+  Common/
+    crc16.c/h                Modbus CRC16
+    log.c/h                  USART1 DAP 日志输出
+  Procotol/
+    modbus_master.c/h        Modbus RTU 帧构建与解析
+  Service/
+    sample_service.c/h       本地 ADC 采样服务
+    modbus_service.c/h       Modbus 轮询和 06 写接口
+    cloud_service.c/h        ESP8266 Wi-Fi/MQTT 上传
+    terminal_service.c/h     终端状态统一管理
+    terminal_data.h          终端状态结构体
 ```
 
-**log.c** - 日志系统
-```c
-void log_init(void);
-void log_info(const char *msg);
-void log_error(const char *msg);
-void log_debug(const char *msg);
-```
+## FreeRTOS 任务
 
-**esp8266_service.c** - ESP8266 服务
-```c
-void esp8266_service_init(void);
-void esp8266_send_cmd(const char *cmd);
-uint8_t esp8266_wait_response(const char *expect, uint32_t timeout_ms);
-uint8_t esp8266_connect_wifi(const char *ssid, const char *password);
-uint8_t esp8266_connect_mqtt(const char *broker, uint16_t port);
-uint8_t esp8266_mqtt_publish(const char *topic, const char *payload);
-```
+| 任务 | 周期 | 功能 |
+|---|---:|---|
+| `ledTask` | 500 ms | 翻转 LD1，表示系统运行 |
+| `sampleTask` | 1000 ms | 读取 PB15 ADC，更新本地采样值 |
+| `modbusTask` | 1000 ms | 读取 Modbus 从站寄存器 0 和 1 |
+| `logTask` | 2000 ms | 打印终端完整状态 |
+| `cloudTask` | 5000 ms | 通过 ESP8266 上传 MQTT JSON |
 
-## ⚙️ CubeMX 配置检查清单
+## 运行日志示例
 
-### 系统配置
-- [ ] SYS Debug: Serial Wire
-- [ ] RCC HSE: Crystal/Ceramic Resonator (24MHz)
-- [ ] Timebase Source: TIM6 或 TIM7（不要用 SysTick）
+启动后：
 
-### GPIO 配置
-- [ ] PB9: GPIO_Output (LED_RUN)
-- [ ] PB13: GPIO_Output (RS485_DE)
-
-### UART 配置
-- [ ] USART2: Asynchronous, 115200, 8N1
-- [ ] USART3: Asynchronous, 9600, 8N1
-- [ ] **USART3 NVIC: 勾选 "USART3 global interrupt"**（第 7 批关键）
-- [ ] USART1: Asynchronous, 115200, 8N1（可选，ESP8266）
-
-### ADC 配置（可选）
-- [ ] ADC1: 12-bit, Right alignment
-- [ ] ADC1 Channel: PA1 或 PB15
-
-### FreeRTOS 配置
-- [ ] Interface: CMSIS_V2
-- [ ] Tasks: ledTask, sampleTask, modbusTask, logTask, cloudTask
-- [ ] Queues: sampleQueue（可选）
-
-## 📊 串口日志格式
-
-### 日志前缀说明
-
-| 前缀 | 含义 | 来源 |
-|------|------|------|
-| [BOOT] | 系统启动 | main.c |
-| [RTOS] | FreeRTOS 事件 | app_freertos.c |
-| [SAMPLE] | 本地采样 | sampleTask |
-| [MODBUS] | Modbus 通信 | modbusTask |
-| [STATE] | 终端状态 | logTask |
-| [CLOUD] | 云传输 | cloudTask |
-| [ERROR] | 错误信息 | 各模块 |
-
-### 典型日志输出
-
-```
+```text
 [BOOT] system start
-[RTOS] tasks running
 [SAMPLE] local=1234
-[MODBUS] TX: 01 03 00 00 00 02 C4 0B
-[MODBUS] RX OK: remote=456
-[STATE] local=1234 remote=456 online=1 sample=100 mb_ok=95 mb_fail=5 upload=0
-[CLOUD] mqtt publish ok
+[MODBUS] 03 tx: 01 03 00 00 00 02 C4 0B
+[STATE] local=1234 remote=0 mb_online=0 cloud=0 sample=1 mb_ok=0 mb_fail=0 upload=0
 ```
 
-## 📡 Modbus RTU 通信
+Modbus 成功：
 
-### 03 功能码（读保持寄存器）
-
-**请求帧**：`[从站地址] [功能码] [起始地址H] [起始地址L] [数量H] [数量L] [CRC_L] [CRC_H]`
-
-**响应帧**：`[从站地址] [功能码] [字节数] [数据...] [CRC_L] [CRC_H]`
-
-**例子**：
-- 请求：`01 03 00 00 00 02 C4 0B`（从站 1，读寄存器 0，数量 2）
-- 响应：`01 03 04 00 7B 01 C8 XX XX`（寄存器 0 = 123，寄存器 1 = 456）
-
-### 06 功能码（写单寄存器）
-
-**请求帧**：`[从站地址] [功能码] [寄存器地址H] [寄存器地址L] [值H] [值L] [CRC_L] [CRC_H]`
-
-**响应帧**：原样返回请求帧
-
-### CRC16 计算
-
-Modbus RTU 使用 CRC16-CCITT，初始值 0xFFFF，多项式 0xA001，低字节先发。
-
-## 🌐 MQTT 数据格式
-
-### 上传主题
-```
-gateway/stm32/data
+```text
+[MODBUS] 03 rx: 01 03 04 00 7B 00 01 ...
+[MODBUS] device online
+[MODBUS] 03 ok reg0=123 reg1=1
 ```
 
-### JSON 格式
+云端连接成功：
+
+```text
+[CLOUD] check esp8266
+[CLOUD] wifi connecting
+[CLOUD] wifi connected
+[CLOUD] mqtt connecting
+[CLOUD] mqtt connected
+[CLOUD] publish ok
+```
+
+MQTTX 收到的 JSON：
+
 ```json
-{
-  "local": 1234,
-  "remote": 456,
-  "online": 1,
-  "mb_ok": 95,
-  "mb_fail": 5,
-  "upload": 10
-}
+{"local":1234,"remote":456,"online":1,"cloud":1,"sample":10,"mb_ok":8,"mb_fail":2,"upload":3}
 ```
 
-## 🐛 常见问题
+## MQTTX 配置
 
-### Q1：第七批串口不打印
-**原因**：USART3 中断未在 CubeMX 中使能
+1. 打开 MQTTX。
+2. 新建连接。
+3. Host 填 `broker.emqx.io`。
+4. Port 填 `1883`。
+5. Client ID 填 `gateway_pc_test` 或其他不重复 ID。
+6. Username 和 Password 留空。
+7. 新建订阅，Topic 填 `gateway/stm32/data`，QoS 选 `0`。
+8. 开发板运行且 ESP8266 联网成功后，MQTTX 会收到 JSON。
 
-**解决**：
-1. 打开 `.ioc` 文件
-2. Connectivity → USART3 → NVIC Settings
-3. 勾选 "USART3 global interrupt"
-4. 生成代码
+云传输参数在 [cloud_service.h](E:/AMy_Project/Gateway/code/Service/cloud_service.h) 中修改：
 
-### Q2：Modbus 通信超时
-**可能原因**：RS485 接线错误、波特率不匹配、从站地址错误
+```c
+#define CLOUD_WIFI_SSID       "mywifi"
+#define CLOUD_WIFI_PASSWORD   "12345678"
+#define CLOUD_MQTT_HOST       "broker.emqx.io"
+#define CLOUD_MQTT_PORT       1883U
+#define CLOUD_MQTT_TOPIC      "gateway/stm32/data"
+#define CLOUD_MQTT_CLIENT_ID  "stm32_gateway_g431"
+```
 
-**调试步骤**：
-1. 检查 RS485 A/B 接线
-2. 用串口助手验证波特率
-3. 查看 USART2 日志中的 TX HEX
-4. 用 USB 转 RS485 模块手动发送测试
+建议：
 
-### Q3：LED 不闪烁
-**可能原因**：PB9 配置错误、LED 极性反接、FreeRTOS 任务未运行
+- 使用 2.4 GHz Wi-Fi。
+- Wi-Fi 名称和密码先用简单 ASCII 字符。
+- 先用 USB-TTL 单独确认 ESP8266 能执行 `AT`、`AT+CWJAP`、`AT+MQTTUSERCFG`、`AT+MQTTCONN`、`AT+MQTTPUB`。
 
-**调试步骤**：
-1. 检查 CubeMX 中 PB9 是否配置为 GPIO_Output
-2. 检查 User Label 是否为 LED_RUN
-3. 查看 USART2 日志是否有输出
-4. 用示波器测量 PB9 电压
+## 上电调试顺序
 
-### Q4：MQTT 发布失败
-**可能原因**：Wi-Fi 未连接、Broker 地址错误、网络不通
+1. 用 Keil 编译并下载。
+2. 打开板载 DAP 虚拟 COM 口，参数 `115200 8N1`。
+3. 确认出现 `[BOOT] system start`。
+4. 确认 LD1 每 500 ms 左右翻转。
+5. 调节 J11/R37 或 PB15 输入电压，确认 `[SAMPLE] local=...` 会变化。
+6. 接 MAX485 和 Modbus 从站。
+7. 确认出现 Modbus TX/RX 日志，并最终看到 `mb_online=1`。
+8. 断开 RS485，确认失败计数增加并最终 `device offline`。
+9. 恢复 RS485，确认重新 `device online`。
+10. 用 USB-TTL 单独测试 ESP8266。
+11. ESP8266 接到 `PA2/PA3` 后运行，确认 MQTTX 收到 JSON。
 
-**调试步骤**：
-1. 检查 ESP8266 是否连接 Wi-Fi（AT+CWJAP?）
-2. 检查 Broker 地址和端口
-3. 用 MQTTX 客户端测试 Broker 连接
-4. 查看 ESP8266 返回的错误信息
+## 常见问题
 
-## 📈 性能指标
+### 没有日志
 
-| 指标 | 值 |
-|------|-----|
-| CPU 使用率 | < 30% |
-| 内存使用 | < 50KB |
-| 采样延迟 | < 10ms |
-| Modbus 响应时间 | 200-500ms |
-| MQTT 上传周期 | 5s |
-| 系统启动时间 | < 2s |
+- 确认打开的是板载 DAP 虚拟 COM 口，不是普通 USB_DEVICE 口。
+- 串口参数必须是 `115200 8N1`。
+- 当前日志走 `USART1/PA9/PA10`。
+- 不要把 ESP8266 接到 PA9/PA10。
 
-## 🚀 快速开始
+### Modbus 一直超时
 
-### 编译步骤
-1. 打开 CubeMX，加载 `.ioc` 文件
-2. 验证配置（见上文检查清单）
-3. 生成代码
-4. Keil 打开工程
-5. 点击 Build 编译
-6. 点击 Download 下载
+- 检查 `PB10` 是否接 MAX485 `DI`。
+- 检查 `PB11` 是否接 MAX485 `RO`。
+- 检查 `PB13` 是否接 `DE` 和 `/RE`。
+- 检查 A/B 是否需要对调。
+- 检查 USART3 波特率是否和从站一致，当前为 `115200 8N1`。
+- 检查从站地址是否为 `1`。
+- 检查从站是否支持从保持寄存器地址 `0` 开始读 `2` 个寄存器。
 
-### 验收标准
-- [ ] 编译 0 Error
-- [ ] LED 闪烁正常
-- [ ] USART2 日志输出清楚
-- [ ] 本地采样值周期更新
-- [ ] Modbus 通信正常
-- [ ] 离线检测正常
-- [ ] 恢复上线正常
-- [ ] MQTT 发布成功
+### ESP8266 没反应
 
-## 📝 简历描述
+- 检查 ESP8266 供电，优先怀疑电流不够。
+- 检查 `PA2` 接 ESP8266 `RX`，`PA3` 接 ESP8266 `TX`。
+- 检查 `EN/CH_PD` 是否拉高。
+- 检查 ESP8266 AT 固件波特率是否为 115200。
+- 先用 USB-TTL 直接发送 `AT\r\n`，确认模块本身正常。
 
-### 完整云传输版
-基于 STM32G431RBT6 和 FreeRTOS 设计轻量化工业数据采集与云传输终端，实现本地模拟量采集、RS485/Modbus RTU 主站轮询、ESP8266 联网和 MQTT 数据上传。项目采用多任务架构划分采样、通信、日志和云传输模块，并设计统一数据结构管理终端状态，支持通信超时、重试、离线检测和恢复上线日志输出。
+### MQTT 指令返回 ERROR
 
-### 本地版
+- 一些 ESP8266 AT 固件不支持 MQTT 指令。
+- 可以刷支持 MQTT 的 Espressif AT 固件。
+- 如果暂时不做云传输，本地采样 + RS485/Modbus + 日志已经可以作为核心演示。
+
+## 项目简历描述
+
+完整云传输版：
+
+基于 STM32G431RBT6 和 FreeRTOS 设计轻量化工业数据采集与云传输终端，实现本地模拟量采集、RS485/Modbus RTU 主站轮询、ESP8266 联网和 MQTT 数据上传。项目采用多任务架构划分采样、通信、日志和云传输模块，并设计统一数据结构管理终端状态，支持通信超时、连续失败离线、恢复上线和上传失败重连等基础异常处理。
+
+本地稳定版：
+
 基于 STM32G431RBT6 和 FreeRTOS 设计轻量化工业数据采集终端，实现本地数据采样、RS485/Modbus RTU 主站轮询和串口日志监控。项目采用多任务架构划分采样、通信和日志模块，封装基础 BSP 接口，并加入 Modbus CRC 校验、通信超时、连续失败离线和恢复上线机制。
-
-## 🎤 面试讲解稿
-
-**1 分钟项目介绍**：
-我做的是一个基于 STM32G431 和 FreeRTOS 的轻量化工业数据采集与云传输终端。项目里 STM32 负责本地采样，同时通过 RS485 以 Modbus RTU 主站方式读取外部寄存器数据，再把本地值和远程值整合成终端状态。软件上我用 FreeRTOS 分成采样任务、Modbus 通信任务、日志任务和云上传任务，并通过统一的数据结构管理状态。后面通过 ESP8266 AT 指令连接 Wi-Fi，用 MQTT 把 JSON 数据上传到 Broker，在 MQTTX 或手机端查看。项目里我还做了 CRC 校验、超时重试和离线检测，方便演示异常恢复。
-
-**常见问题**：
-1. **为什么用 FreeRTOS？** 因为项目里有多个周期性功能，FreeRTOS 可以把这些功能拆成独立任务，让结构更清楚，也方便后续扩展和调试。
-2. **你用了哪些任务？** ledTask、sampleTask、modbusTask、logTask 和 cloudTask。
-3. **Modbus RTU 03 一帧是什么结构？** 03 请求帧包括从站地址、功能码、起始寄存器地址、寄存器数量和 CRC16。
-4. **怎么判断设备离线？** 连续失败达到阈值（3 次）才把 online 置为 0，后续成功一次就恢复。
-5. **ESP8266 怎么上传？** 用 STM32 通过串口发送 AT 指令控制 ESP8266，连接 Wi-Fi 和 MQTT，上传 JSON 数据。
-6. **项目里最难的点是什么？** 把各个 demo 串成一个稳定的系统，避免串口日志、Modbus 接收、任务周期和 ESP8266 返回数据之间互相干扰。
-
-## 📚 参考资源
-
-- [STM32G431 数据手册](https://www.st.com/resource/en/datasheet/stm32g431cb.pdf)
-- [FreeRTOS 官方文档](https://www.freertos.org/Documentation/161204_Mastering_the_FreeRTOS_Real_Time_Kernel.pdf)
-- [Modbus RTU 规范](http://www.modbus.org/docs/Modbus_over_serial_line_V1_02.pdf)
-- [MQTT 3.1.1 规范](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/mqtt-v3.1.1.html)
-
-## 📄 许可证
-
-MIT License
-
----
-
-**最后更新**：2026 年 5 月 19 日
-
-**项目状态**：完整文档（第 1-29 批）
-
-**核心原则**：先跑通，再优化；先假数据，再真硬件；先串口日志看到结果，再做复杂功能

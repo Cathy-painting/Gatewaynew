@@ -36,6 +36,7 @@
 "gateway\bsp_uart.o"
 "gateway\bsp_rs485.o"
 "gateway\bsp_adc.o"
+"gateway\bsp_lcd.o"
 "gateway\log.o"
 "gateway\crc16.o"
 "gateway\modbus_master.o"

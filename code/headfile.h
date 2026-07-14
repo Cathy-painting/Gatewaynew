@@ -5,6 +5,8 @@
 #include "bsp_led.h"
 #include "bsp_uart.h"
 #include "bsp_rs485.h"
+#include "bsp_lcd.h"
+#include "lcd.h"
 #include "sample_service.h"
 #include "modbus_service.h"
 #include "cloud_service.h"

@@ -2,11 +2,26 @@
 #include "gpio.h"
 #include "main.h"
 #include "usart.h"
+#include "bsp_uart.h"
 
 #define RS485_DE_GPIO_Port GPIOB
 #define RS485_DE_Pin GPIO_PIN_13
 
 extern UART_HandleTypeDef huart3;
+
+void bsp_rs485_init(void)
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    HAL_GPIO_WritePin(RS485_DE_GPIO_Port, RS485_DE_Pin, GPIO_PIN_RESET);
+
+    GPIO_InitStruct.Pin = RS485_DE_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(RS485_DE_GPIO_Port, &GPIO_InitStruct);
+}
 
 static void bsp_rs485_short_delay(void)
 {
@@ -37,4 +52,6 @@ void bsp_rs485_send(const uint8_t *data, uint16_t len)
     }
     bsp_rs485_short_delay();
     bsp_rs485_set_rx_mode();
+
+    bsp_uart3_rx_restart();
 }

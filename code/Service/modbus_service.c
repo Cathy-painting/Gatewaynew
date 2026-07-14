@@ -1,3 +1,4 @@
+
 #include "modbus_service.h"
 #include "terminal_service.h"
 #include "modbus_master.h"
@@ -5,107 +6,170 @@
 #include "bsp_uart.h"
 #include "log.h"
 #include "cmsis_os.h"
+#include "usart.h"
 #include <stdio.h>
 #include <string.h>
 
-/* 显式 extern 声明，避免 #70 incomplete type 错误 */
-extern uint8_t uart3_rx_buf[256];
-extern uint16_t uart3_rx_len;
+#define MODBUS_SLAVE_ID      1U
+#define MODBUS_START_ADDR    0U
+#define MODBUS_QUANTITY      2U
+#define MODBUS_TIMEOUT_MS    200U
+#define MODBUS_MAX_FAIL      3U
+#define MODBUS_RX_BUF_SIZE   256U
+#define MODBUS_FRAME_IDLE_MS 20U
 
-#define MODBUS_SLAVE_ID      1
-#define MODBUS_START_ADDR    0
-#define MODBUS_QUANTITY      2
-#define MODBUS_TIMEOUT_MS    200
-#define MODBUS_MAX_FAIL      3
+static uint8_t modbus_online = 0U;
+static uint8_t modbus_fail_streak = 0U;
 
-static uint32_t modbus_fail_count = 0;
-static uint8_t  modbus_online     = 0;
+static uint16_t modbus_wait_response(uint8_t *rx_buf, uint16_t rx_buf_size, uint32_t timeout_ms)
+{
+    uint32_t start_tick = osKernelGetTickCount();
+    uint16_t last_len = 0U;
+    uint16_t cur_len = 0U;
+    uint32_t stable_tick = 0U;
+
+    while ((osKernelGetTickCount() - start_tick) < timeout_ms) {
+        cur_len = bsp_uart_get_rx_length(&huart3);
+        if (cur_len > 0U) {
+            if (cur_len == last_len) {
+                if ((osKernelGetTickCount() - stable_tick) >= MODBUS_FRAME_IDLE_MS) {
+                    return bsp_uart_copy_rx_buffer(&huart3, rx_buf, rx_buf_size);
+                }
+            } else {
+                last_len = cur_len;
+                stable_tick = osKernelGetTickCount();
+            }
+        }
+        osDelay(5);
+    }
+
+    if (cur_len > 0U) {
+        return bsp_uart_copy_rx_buffer(&huart3, rx_buf, rx_buf_size);
+    }
+    return 0U;
+}
+
+static void modbus_mark_success(void)
+{
+    modbus_fail_streak = 0U;
+    if (modbus_online == 0U) {
+        log_info("[MODBUS] device online\r\n");
+    }
+    modbus_online = 1U;
+    terminal_set_remote_online(1U);
+    terminal_inc_modbus_ok();
+}
+
+static void modbus_mark_fail(const char *reason)
+{
+    terminal_inc_modbus_fail();
+    if (modbus_fail_streak < 255U) {
+        modbus_fail_streak++;
+    }
+
+    log_infof("[MODBUS] %s fail=%u\r\n", reason, modbus_fail_streak);
+
+    if (modbus_fail_streak >= MODBUS_MAX_FAIL) {
+        if (modbus_online != 0U) {
+            log_info("[MODBUS] device offline\r\n");
+        }
+        modbus_online = 0U;
+        terminal_set_remote_online(0U);
+    }
+}
+
+void modbus_service_init(void)
+{
+    modbus_online = 0U;
+    modbus_fail_streak = 0U;
+    terminal_set_remote_online(0U);
+}
 
 void modbus_service_poll_once(void)
 {
-    uint8_t  tx_buf[8];
+    uint8_t tx_buf[8];
+    uint8_t rx_buf[MODBUS_RX_BUF_SIZE];
     uint16_t tx_len;
+    uint16_t rx_len;
     uint16_t regs[MODBUS_QUANTITY];
-    char     log_buf[128];
-    int      result;
+    int result;
 
+    memset(rx_buf, 0, sizeof(rx_buf));
     tx_len = modbus_build_read_holding_req(MODBUS_SLAVE_ID,
                                            MODBUS_START_ADDR,
                                            MODBUS_QUANTITY,
-                                           tx_buf, sizeof(tx_buf));
-    if (tx_len == 0)
-    {
-        log_info("[MODBUS] build request failed\r\n");
+                                           tx_buf,
+                                           sizeof(tx_buf));
+    if (tx_len == 0U) {
+        log_info("[MODBUS] build 03 request failed\r\n");
         return;
     }
 
-    snprintf(log_buf, sizeof(log_buf),
-             "[MODBUS] tx: %02X %02X %02X %02X %02X %02X %02X %02X\r\n",
-             tx_buf[0], tx_buf[1], tx_buf[2], tx_buf[3],
-             tx_buf[4], tx_buf[5], tx_buf[6], tx_buf[7]);
-    log_info(log_buf);
-
-    uart3_rx_len = 0;
-    memset(uart3_rx_buf, 0, sizeof(uart3_rx_buf));
-
+    log_hex("[MODBUS] 03 tx: ", tx_buf, tx_len);
+    bsp_uart_clear_rx_buffer(&huart3);
     bsp_rs485_send(tx_buf, tx_len);
 
-    osDelay(MODBUS_TIMEOUT_MS);
-
-    if (uart3_rx_len == 0)
-    {
-        modbus_fail_count++;
-        terminal_inc_modbus_fail();
-        snprintf(log_buf, sizeof(log_buf),
-                 "[MODBUS] timeout fail=%lu\r\n",
-                 (unsigned long)modbus_fail_count);
-        log_info(log_buf);
-    }
-    else
-    {
-        result = modbus_parse_read_holding_resp(MODBUS_SLAVE_ID,
-                                                MODBUS_QUANTITY,
-                                                uart3_rx_buf,
-                                                uart3_rx_len,
-                                                regs, sizeof(regs) / sizeof(regs[0]));
-
-        if (result == MODBUS_OK)
-        {
-            terminal_set_remote_value(regs[0]);
-            terminal_set_remote_online(1);
-            terminal_inc_modbus_ok();
-            modbus_fail_count = 0;
-            modbus_online     = 1;
-            snprintf(log_buf, sizeof(log_buf),
-                     "[MODBUS] rx ok reg0=%u reg1=%u\r\n",
-                     regs[0], regs[1]);
-            log_info(log_buf);
-        }
-        else
-        {
-            modbus_fail_count++;
-            terminal_inc_modbus_fail();
-            snprintf(log_buf, sizeof(log_buf),
-                     "[MODBUS] rx error code=%d fail=%lu\r\n",
-                     result, (unsigned long)modbus_fail_count);
-            log_info(log_buf);
-        }
+    rx_len = modbus_wait_response(rx_buf, sizeof(rx_buf), MODBUS_TIMEOUT_MS);
+    if (rx_len == 0U) {
+        modbus_mark_fail("timeout");
+        return;
     }
 
-    if (modbus_fail_count >= MODBUS_MAX_FAIL)
-    {
-        if (modbus_online)
-        {
-            modbus_online = 0;
-            terminal_set_remote_online(0);
-            log_info("[MODBUS] device offline\r\n");
-        }
+    log_hex("[MODBUS] 03 rx: ", rx_buf, rx_len);
+    result = modbus_parse_read_holding_resp(MODBUS_SLAVE_ID,
+                                            MODBUS_QUANTITY,
+                                            rx_buf,
+                                            rx_len,
+                                            regs,
+                                            (uint16_t)(sizeof(regs) / sizeof(regs[0])));
+    if (result == MODBUS_OK) {
+        terminal_set_remote_value(regs[0]);
+        modbus_mark_success();
+        log_infof("[MODBUS] 03 ok reg0=%u reg1=%u\r\n", regs[0], regs[1]);
+    } else {
+        log_infof("[MODBUS] 03 parse error=%d\r\n", result);
+        modbus_mark_fail("frame");
     }
-    else
-    {
-        if (!modbus_online && modbus_fail_count == 0)
-        {
-            log_info("[MODBUS] device online\r\n");
-        }
+}
+
+uint8_t modbus_service_write_single(uint16_t reg_addr, uint16_t value)
+{
+    uint8_t tx_buf[8];
+    uint8_t rx_buf[MODBUS_RX_BUF_SIZE];
+    uint16_t tx_len;
+    uint16_t rx_len;
+    int result;
+
+    memset(rx_buf, 0, sizeof(rx_buf));
+    tx_len = modbus_build_write_single_req(MODBUS_SLAVE_ID,
+                                           reg_addr,
+                                           value,
+                                           tx_buf,
+                                           sizeof(tx_buf));
+    if (tx_len == 0U) {
+        log_info("[MODBUS] build 06 request failed\r\n");
+        return 0U;
     }
+
+    log_hex("[MODBUS] 06 tx: ", tx_buf, tx_len);
+    bsp_uart_clear_rx_buffer(&huart3);
+    bsp_rs485_send(tx_buf, tx_len);
+
+    rx_len = modbus_wait_response(rx_buf, sizeof(rx_buf), MODBUS_TIMEOUT_MS);
+    if (rx_len == 0U) {
+        modbus_mark_fail("write-timeout");
+        return 0U;
+    }
+
+    log_hex("[MODBUS] 06 rx: ", rx_buf, rx_len);
+    result = modbus_parse_write_single_resp(MODBUS_SLAVE_ID, reg_addr, value, rx_buf, rx_len);
+    if (result == MODBUS_OK) {
+        modbus_mark_success();
+        log_info("[MODBUS] 06 ok\r\n");
+        return 1U;
+    }
+
+    log_infof("[MODBUS] 06 parse error=%d\r\n", result);
+    modbus_mark_fail("write-frame");
+    return 0U;                                                                                          
 }
