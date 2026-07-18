@@ -3,15 +3,16 @@
 
 #include <stdint.h>
 
-#define CLOUD_WIFI_SSID       "mywifi"
-#define CLOUD_WIFI_PASSWORD   "12345678"
-#define CLOUD_MQTT_HOST       "broker.emqx.io"
-#define CLOUD_MQTT_PORT       1883U
-#define CLOUD_MQTT_TOPIC      "gateway/stm32/data"
-#define CLOUD_MQTT_CLIENT_ID  "stm32_gateway_g431"
+/* ====== WiFi 配置 ====== */
+#define CLOUD_WIFI_SSID       "111"
+#define CLOUD_WIFI_PASSWORD   "amg1408700"
+
+/* ====== ESP8266 HTTP Server 配置 ====== */
+/* ESP8266 作为 HTTP 服务器，手机浏览器直接访问 ESP8266 的 IP */
+#define CLOUD_SERVER_PORT     8080U
 
 void cloud_service_init(void);
 void cloud_service_publish_once(void);
 uint8_t cloud_service_is_ready(void);
 
-#endif
+#endif /* CLOUD_SERVICE_H */

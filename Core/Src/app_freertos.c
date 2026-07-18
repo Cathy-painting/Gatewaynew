@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "app_tasks.h"
+#include "log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -264,6 +265,7 @@ void StartModbusTask(void *argument)
 
 void StartCloudTask(void *argument)
 {
+  log_info("[CLOUD] task started\r\n");
   for(;;)
   {
     app_cloud_task();

@@ -63,6 +63,7 @@ void app_log_task(void)
 
 void app_cloud_task(void)
 {
+    log_info("[CLOUD] app_cloud_task running\r\n");
     cloud_service_publish_once();
     osDelay(5000);
 }
