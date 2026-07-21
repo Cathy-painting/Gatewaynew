@@ -157,10 +157,15 @@ void MX_FREERTOS_Init(void) {
 
   const osThreadAttr_t cloudTask_attributes = {
     .name = "cloudTask",
-    .priority = (osPriority_t) osPriorityBelowNormal,
+    .priority = (osPriority_t) osPriorityNormal,
     .stack_size = 768 * 4
   };
-  osThreadNew(StartCloudTask, NULL, &cloudTask_attributes);
+  osThreadId_t cloud_handle = osThreadNew(StartCloudTask, NULL, &cloudTask_attributes);
+  if (cloud_handle == NULL) {
+    log_info("[ERROR] cloudTask create failed!\r\n");
+  } else {
+    log_info("[BOOT] cloudTask created OK\r\n");
+  }
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

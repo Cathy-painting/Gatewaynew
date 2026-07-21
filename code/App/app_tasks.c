@@ -43,19 +43,17 @@ void app_log_task(void)
     terminal_data_t data;
     char buf[160];
 
-    log_info("[LOG] logTask running\r\n");
-    
     terminal_get_snapshot(&data);
     snprintf(buf, sizeof(buf),
-             "[STATE] local=%u remote=%u mb_online=%u cloud=%u sample=%lu mb_ok=%lu mb_fail=%lu upload=%lu\r\n",
+             "[STATE] local=%u remote=%u mb=%s cloud=%s sample=%lu ok=%lu fail=%lu upload=%lu\r\n",
              data.local_value,
              data.remote_value,
-             data.remote_online,
-             data.cloud_online,
-             data.sample_count,
-             data.modbus_ok_count,
-             data.modbus_fail_count,
-             data.upload_count);
+             data.remote_online ? "ON" : "OFF",
+             data.cloud_online ? "ON" : "OFF",
+             (unsigned long)data.sample_count,
+             (unsigned long)data.modbus_ok_count,
+             (unsigned long)data.modbus_fail_count,
+             (unsigned long)data.upload_count);
     log_info(buf);
 
     osDelay(2000);
@@ -65,5 +63,6 @@ void app_cloud_task(void)
 {
     log_info("[CLOUD] app_cloud_task running\r\n");
     cloud_service_publish_once();
-    osDelay(5000);
+    bsp_led_toggle(8);  /* 心跳：LED8 闪烁 = 云端任务正常运行 */
+    osDelay(500);
 }
