@@ -2,76 +2,65 @@
 
 static uint8_t led_state = 0x00;
 
-void bsp_led_write8(uint8_t value){
-	led_state=value;
-	
-	HAL_GPIO_WritePin(GPIOD,GPIO_PIN_2,GPIO_PIN_SET);
+osMutexId_t g_lcd_led_bus_mutex = NULL;
 
-	for(uint8_t i=0; i<8; i++){
-				//	0000 0000    value
-		    //  0000 0010    2
-		    //  0000 0001    1
-			if(value & (1<<i)){
-				 HAL_GPIO_WritePin(GPIOC,GPIO_PIN_8 << i,GPIO_PIN_RESET);
-			
-			}else{
-				 HAL_GPIO_WritePin(GPIOC,GPIO_PIN_8 << i,GPIO_PIN_SET);
-			}
-		
-		}
-
-		HAL_GPIO_WritePin(GPIOD,GPIO_PIN_2,GPIO_PIN_RESET);
-
+void bsp_bus_lock(void)
+{
+    if (g_lcd_led_bus_mutex != NULL) {
+        if (osMutexAcquire(g_lcd_led_bus_mutex, 100U) != osOK) {
+            /* 超时获取锁失败，避免死锁 */
+        }
+    }
 }
 
-void bsp_led_on(uint8_t led){
-	//led=3 
-  if(led <1 || led > 8)
-	{
-	return;
-	}
-//0000 0000	
-//0000 0001
-	led_state |= (1<<(led-1));
-	bsp_led_write8(led_state);
+void bsp_bus_unlock(void)
+{
+    if (g_lcd_led_bus_mutex != NULL) {
+        (void)osMutexRelease(g_lcd_led_bus_mutex);
+    }
 }
 
-void bsp_led_off(uint8_t led){
-	 //led= 4
-	if(led<1 || led>8)
-	{
-	return;
-	}
-//0000 1101 yuan
-//0000 1000 mie
-//1111 0111
-	
-//0000 0001
-	led_state &= ~(1<< (led-1));
-	bsp_led_write8(led_state);
+void bsp_led_write8(uint8_t value)
+{
+    led_state = value;
 
+    bsp_bus_lock();
+
+    /* 打开 74HC573 锁存使能，PC8-PC15 直通到 LED */
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
+
+    /* 原子更新 PC8-PC15：bit=1 对应 LED 亮 -> GPIO 输出低电平 */
+    GPIOC->ODR = (GPIOC->ODR & 0x00FFU) |
+                 (((uint16_t)(~value) << 8) & 0xFF00U);
+
+    /* 关闭锁存，保存 LED 状态 */
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET);
+
+    bsp_bus_unlock();
 }
 
-void bsp_led_toggle(uint8_t led){
-	
-  if(led<1||led>8){
-		return;
-	}
-//0000 0101
-//0100 0100
-//0000 0001
-	led_state ^= (1<<(led-1));
-	
-  bsp_led_write8(led_state);
+void bsp_led_on(uint8_t led)
+{
+    if (led < 1 || led > 8) return;
+    led_state |= (1 << (led - 1));
+    bsp_led_write8(led_state);
 }
 
+void bsp_led_off(uint8_t led)
+{
+    if (led < 1 || led > 8) return;
+    led_state &= ~(1 << (led - 1));
+    bsp_led_write8(led_state);
+}
 
+void bsp_led_toggle(uint8_t led)
+{
+    if (led < 1 || led > 8) return;
+    led_state ^= (1 << (led - 1));
+    bsp_led_write8(led_state);
+}
 
-
-
-
-
-
-
-
-
+uint8_t bsp_led_get_state(void)
+{
+    return led_state;
+}

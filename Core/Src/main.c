@@ -20,6 +20,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "adc.h"
+#include "iwdg.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -31,6 +32,7 @@
 #include "bsp_adc.h"
 #include "string.h"
 #include "app_tasks.h"
+#include "log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,6 +60,22 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void log_reset_cause(void)
+{
+    uint32_t csr = RCC->CSR;
+    log_infof("[RESET] CSR=0x%08X", (unsigned int)csr);
+
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_BORRST))  log_info(" BOR/POR");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST))  log_info(" NRST");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST))  log_info(" SFT");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)) log_info(" IWDG");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_WWDGRST)) log_info(" WWDG");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)) log_info(" LPWR");
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_OBLRST))  log_info(" OBL");
+
+    log_info("\r\n");
+    __HAL_RCC_CLEAR_RESET_FLAGS();
+}
 /* USER CODE END 0 */
 
 /**
@@ -89,12 +107,26 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM6_Init();
   MX_ADC2_Init();
-  MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  /* IWDG 延后到长初始化之后再启动，避免 LCD/业务 init 超时复位导致白屏死循环 */
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(1000);             
+  /* --- 阶段1心跳：打开锁存后 PC8 闪1次，确认 MX 外设初始化 OK --- */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
+  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+  HAL_Delay(200);
+  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_8);
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET);
+
+  /* 复位原因日志（USART1已就绪） */
+  log_reset_cause();
+
+  HAL_Delay(200);
   app_init_before_scheduler();
+
+  /* 长初始化完成后再启动 IWDG（约 4~5s 超时），由 watchdogTask 负责喂狗 */
+  MX_IWDG_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -114,7 +146,7 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */	
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
@@ -135,8 +167,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSI|RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV3;
