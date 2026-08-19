@@ -15,7 +15,7 @@ RS485通信
 LCD显示
 I2C EEPROM读写
 一、头文件讲解
-1. headfile.h
+1. app_common.h
 统一的头文件入口，包含了项目所需的所有头文件
 包含了FreeRTOS、标准库、以及各个模块的头文件
 2. log.h
@@ -211,7 +211,7 @@ code/
 ├── Common/           # 通用模块
 │   ├── log.c/h       # 日志
 │   └── crc16.c/h     # CRC校验
-├── Procotol/         # 协议层
+├── Protocol/         # 协议层
 │   └── modbus_master.c/h # Modbus主站
 ├── Service/          # 服务层
 │   ├── sample_service.c/h   # 采样服务
@@ -219,7 +219,7 @@ code/
 │   ├── cloud_service.c/h    # 云端服务
 │   ├── terminal_service.c/h # 终端服务
 │   └── terminal_data.h      # 数据结构
-├── headfile.h        # 统一头文件
+├── app_common.h      # 统一头文件
 ├── i2c_hal.c/h       # I2C驱动
 ├── lcd.c/h           # LCD驱动
 └── fonts.h           # 字体数据
